@@ -8,6 +8,8 @@ import '../../services/follow_up_service.dart';
 import '../auth/login_screen.dart';
 import 'admin_individual_map_screen.dart';
 import 'admin_create_user_screen.dart';
+import 'user_detail_screen.dart';
+import '../auth/profile_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -17,8 +19,9 @@ class AdminScreen extends StatefulWidget {
 }
 
 class _AdminScreenState extends State<AdminScreen> {
-  List<User> _locationUsers = [];
+  List<User> _users = [];
   Set<int> _followedUserIds = {};
+  int? _currentAdminId;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -35,27 +38,29 @@ class _AdminScreenState extends State<AdminScreen> {
       _errorMessage = null;
     });
 
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('jwt_token');
-
-    if (token == null) {
-      _logout();
-      return;
-    }
-
     try {
-      final usersFuture = UserService.getAllUsers(token);
-      final followingFuture = FollowUpService.getFollowing(token);
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+      if (token == null) {
+        _logout();
+        return;
+      }
 
-      final results = await Future.wait([usersFuture, followingFuture]);
-
-      final allUsers = results[0] as List<User>;
-      final followedUsers = results[1] as List<User>;
+      final results = await Future.wait([
+        UserService.getAllUsers(token),
+        FollowUpService.getFollowing(token),
+        UserService.getProfile(token),
+      ]);
 
       if (mounted) {
+        final allUsers = results[0] as List<User>;
+        final followedUsers = results[1] as List<User>;
+        final currentAdmin = results[2] as User;
+
         setState(() {
-          _locationUsers = allUsers;
+          _users = allUsers;
           _followedUserIds = followedUsers.map((u) => u.id).toSet();
+          _currentAdminId = currentAdmin.id;
         });
       }
     } catch (e) {
@@ -76,7 +81,7 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _toggleFollow(int userId, bool isCurrentlyFollowing) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt_token');
-    if (token == null) return;
+    if (token == null || !mounted) return;
 
     setState(() {
       isCurrentlyFollowing
@@ -98,7 +103,52 @@ class _AdminScreenState extends State<AdminScreen> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Error: ${e.toString().replaceAll("Exception: ", "")}"),
+          content: Text(e.toString().replaceAll("Exception: ", "")),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
+  }
+
+  Future<void> _deleteUserWithConfirmation(User userToDelete) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Confirmar Eliminación'),
+          content: Text('¿Estás seguro de que quieres eliminar a ${userToDelete.name}? Esta acción no se puede deshacer.'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+      if (token == null || !mounted) return;
+
+      try {
+        await UserService.deleteUser(token, userToDelete.id);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Usuario ${userToDelete.name} eliminado correctamente.'),
+          backgroundColor: Colors.green,
+        ));
+        setState(() {
+          _users.removeWhere((user) => user.id == userToDelete.id);
+        });
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceAll("Exception: ", "")),
           backgroundColor: Colors.red,
         ));
       }
@@ -113,11 +163,18 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
+  void _navigateToUserDetails(User user) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AdminUserDetailScreen(user: user),
+      ),
+    );
+  }
+
   void _navigateToCreateUser() async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (context) => const AdminCreateUserScreen()),
     );
-
     if (result == true) {
       _fetchAdminData();
     }
@@ -139,6 +196,16 @@ class _AdminScreenState extends State<AdminScreen> {
       appBar: AppBar(
         title: const Text('Gestión de Usuarios'),
         actions: [
+          // <<<--- 2. AÑADIMOS EL BOTÓN DE PERFIL AQUÍ ---
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
+            tooltip: 'Mi Perfil',
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _logout,
@@ -153,40 +220,91 @@ class _AdminScreenState extends State<AdminScreen> {
           : RefreshIndicator(
         onRefresh: _fetchAdminData,
         child: ListView.builder(
-          itemCount: _locationUsers.length,
+          padding: const EdgeInsets.all(8),
+          itemCount: _users.length,
           itemBuilder: (context, index) {
-            final user = _locationUsers[index];
+            final user = _users[index];
             final isFollowing = _followedUserIds.contains(user.id);
             final canBeFollowed = user.role == 'LOCATION';
+            final canBeDeleted = user.id != _currentAdminId;
 
             return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: ListTile(
-                leading: CircleAvatar(
-                  child: Text(user.name.isNotEmpty ? user.name[0] : '?'),
+              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              elevation: 3,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _navigateToUserDetails(user),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: Colors.blueAccent.withOpacity(0.2),
+                        child: Text(
+                          user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              user.name,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "${user.email} - Rol: ${user.role}",
+                              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (canBeFollowed) ...[
+                            if (isFollowing)
+                              IconButton(
+                                icon: const Icon(Icons.map_outlined, color: Colors.green),
+                                onPressed: () => _navigateToUserMap(user),
+                                tooltip: 'Ver en Mapa',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ElevatedButton(
+                              onPressed: () => _toggleFollow(user.id, isFollowing),
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: isFollowing ? Colors.grey[700] : Colors.blueAccent,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              child: Text(isFollowing ? 'Siguiendo' : 'Seguir'),
+                            ),
+                          ],
+                          if (canBeDeleted)
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                              onPressed: () => _deleteUserWithConfirmation(user),
+                              tooltip: 'Eliminar Usuario',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            )
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-                title: Text(user.name),
-                subtitle: Text("${user.email} - Rol: ${user.role}"),
-                trailing: canBeFollowed ? Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isFollowing)
-                      IconButton(
-                        icon: const Icon(Icons.map, color: Colors.green),
-                        onPressed: () => _navigateToUserMap(user),
-                        tooltip: 'Ver en Mapa',
-                      ),
-                    ElevatedButton(
-                      onPressed: () => _toggleFollow(user.id, isFollowing),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isFollowing ? Colors.grey[700] : Colors.blueAccent,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                      ),
-                      child: Text(isFollowing ? 'Siguiendo' : 'Seguir'),
-                    ),
-                  ],
-                ) : null,
               ),
             );
           },

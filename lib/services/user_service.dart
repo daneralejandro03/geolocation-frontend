@@ -43,4 +43,26 @@ class UserService {
     ));
     return User.fromJson(jsonDecode(response.body));
   }
+
+  static Future<void> deleteUser(String token, int userId) async {
+    final uri = Uri.parse('${ApiClient.baseUrl}/users/$userId');
+    await ApiClient.handleRequest(http.delete(uri, headers: ApiClient.getHeaders(token)));
+  }
+
+  static Future<void> changePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final uri = Uri.parse('${ApiClient.baseUrl}/users/profile/changePassword');
+    await ApiClient.handleRequest(http.patch(
+      uri,
+      headers: ApiClient.getHeaders(token),
+      body: jsonEncode({
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      }),
+    ));
+  }
+
 }

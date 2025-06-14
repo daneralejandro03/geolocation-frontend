@@ -23,4 +23,29 @@ class AuthService {
     ));
     return User.fromJson(jsonDecode(response.body));
   }
+
+  static Future<void> requestPasswordRecovery(String email) async {
+    final uri = Uri.parse('${ApiClient.baseUrl}/auth/requestPasswordRecovery');
+    await ApiClient.handleRequest(http.post(
+      uri,
+      headers: ApiClient.getHeaders(null),
+      body: jsonEncode({'email': email}),
+    ));
+  }
+
+  static Future<void> resetPassword({
+    required String pin,
+    required String newPassword,
+  }) async {
+    final uri = Uri.parse('${ApiClient.baseUrl}/auth/resetPassword');
+    await ApiClient.handleRequest(http.post(
+      uri,
+      headers: ApiClient.getHeaders(null),
+      body: jsonEncode({
+        'token': pin,
+        'newPassword': newPassword,
+      }),
+    ));
+  }
+
 }

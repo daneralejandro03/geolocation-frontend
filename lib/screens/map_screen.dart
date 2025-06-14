@@ -10,6 +10,7 @@ import '../services/socket_service.dart';
 import '../services/location_service.dart';
 import '../models/location.dart';
 import 'auth/login_screen.dart';
+import './auth/profile_screen.dart'; // <<<--- 1. IMPORTAMOS LA PANTALLA DE PERFIL
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -157,6 +158,16 @@ class _MapScreenState extends State<MapScreen> {
       appBar: AppBar(
         title: const Text('Mi Ubicación'),
         actions: [
+          // <<<--- 2. AÑADIMOS EL BOTÓN DE PERFIL AQUÍ ---
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
+            tooltip: 'Mi Perfil',
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _logout,
@@ -176,6 +187,7 @@ class _MapScreenState extends State<MapScreen> {
         },
         myLocationEnabled: true,
         myLocationButtonEnabled: false,
+        zoomControlsEnabled: false, // Opcional: para un look más limpio
       ),
       floatingActionButton: _isLoading ? null : FloatingActionButton(
         onPressed: _centerMapOnLocation,

@@ -10,6 +10,7 @@ import 'admin_individual_map_screen.dart';
 import 'admin_create_user_screen.dart';
 import 'user_detail_screen.dart';
 import '../auth/profile_screen.dart';
+import '../location/location_history_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -171,6 +172,15 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
+  // <<<--- 2. AÑADIMOS EL MÉTODO DE NAVEGACIÓN ---
+  void _navigateToLocationHistory(User user) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => LocationHistoryScreen(user: user),
+      ),
+    );
+  }
+
   void _navigateToCreateUser() async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (context) => const AdminCreateUserScreen()),
@@ -196,7 +206,6 @@ class _AdminScreenState extends State<AdminScreen> {
       appBar: AppBar(
         title: const Text('Gestión de Usuarios'),
         actions: [
-          // <<<--- 2. AÑADIMOS EL BOTÓN DE PERFIL AQUÍ ---
           IconButton(
             icon: const Icon(Icons.person_outline),
             onPressed: () {
@@ -272,25 +281,22 @@ class _AdminScreenState extends State<AdminScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (canBeFollowed) ...[
+                            // <<<--- 3. AÑADIMOS EL BOTÓN DE HISTORIAL ---
+                            IconButton(
+                              icon: const Icon(Icons.history, color: Colors.purpleAccent),
+                              onPressed: () => _navigateToLocationHistory(user),
+                              tooltip: 'Ver Historial de Ubicaciones',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
                             if (isFollowing)
                               IconButton(
                                 icon: const Icon(Icons.map_outlined, color: Colors.green),
                                 onPressed: () => _navigateToUserMap(user),
-                                tooltip: 'Ver en Mapa',
+                                tooltip: 'Ver en Tiempo Real',
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),
-                            ElevatedButton(
-                              onPressed: () => _toggleFollow(user.id, isFollowing),
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: isFollowing ? Colors.grey[700] : Colors.blueAccent,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                  textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                              child: Text(isFollowing ? 'Siguiendo' : 'Seguir'),
-                            ),
                           ],
                           if (canBeDeleted)
                             IconButton(

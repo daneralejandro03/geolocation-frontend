@@ -32,4 +32,5 @@ class LocationService {
     ));
     return jsonDecode(response.body);
   }
+
 }

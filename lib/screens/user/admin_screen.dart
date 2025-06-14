@@ -47,6 +47,7 @@ class _AdminScreenState extends State<AdminScreen> {
         return;
       }
 
+      // Se ejecutan las llamadas a la API de forma concurrente para mayor eficiencia
       final results = await Future.wait([
         UserService.getAllUsers(token),
         FollowUpService.getFollowing(token),
@@ -79,11 +80,13 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  // Función para seguir o dejar de seguir a un usuario con actualización optimista de la UI
   Future<void> _toggleFollow(int userId, bool isCurrentlyFollowing) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt_token');
     if (token == null || !mounted) return;
 
+    // Actualiza la UI inmediatamente para una experiencia de usuario fluida
     setState(() {
       isCurrentlyFollowing
           ? _followedUserIds.remove(userId)
@@ -97,6 +100,7 @@ class _AdminScreenState extends State<AdminScreen> {
         await FollowUpService.followUser(token, userId);
       }
     } catch (e) {
+      // Si la API falla, revierte el cambio en la UI y muestra un error
       setState(() {
         isCurrentlyFollowing
             ? _followedUserIds.add(userId)
@@ -111,6 +115,7 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  // Muestra un diálogo de confirmación antes de eliminar un usuario
   Future<void> _deleteUserWithConfirmation(User userToDelete) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -140,18 +145,22 @@ class _AdminScreenState extends State<AdminScreen> {
 
       try {
         await UserService.deleteUser(token, userToDelete.id);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Usuario ${userToDelete.name} eliminado correctamente.'),
-          backgroundColor: Colors.green,
-        ));
+        if(mounted){
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Usuario ${userToDelete.name} eliminado correctamente.'),
+            backgroundColor: Colors.green,
+          ));
+        }
         setState(() {
           _users.removeWhere((user) => user.id == userToDelete.id);
         });
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString().replaceAll("Exception: ", "")),
-          backgroundColor: Colors.red,
-        ));
+        if(mounted){
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString().replaceAll("Exception: ", "")),
+            backgroundColor: Colors.red,
+          ));
+        }
       }
     }
   }
@@ -172,7 +181,6 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
-  // <<<--- 2. AÑADIMOS EL MÉTODO DE NAVEGACIÓN ---
   void _navigateToLocationHistory(User user) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -238,78 +246,105 @@ class _AdminScreenState extends State<AdminScreen> {
             final canBeDeleted = user.id != _currentAdminId;
 
             return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8), // Más espacio vertical
               elevation: 3,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => _navigateToUserDetails(user),
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: Colors.blueAccent.withOpacity(0.2),
-                        child: Text(
-                          user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              user.name,
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              "${user.email} - Rol: ${user.role}",
-                              style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                // --- INICIO DE CAMBIOS DE DISEÑO ---
+                child: Column( // 1. Usamos una Columna para la estructura principal
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 2. Sección superior con la información (clicable)
+                    InkWell(
+                      onTap: () => _navigateToUserDetails(user),
+                      child: Row(
                         children: [
-                          if (canBeFollowed) ...[
-                            // <<<--- 3. AÑADIMOS EL BOTÓN DE HISTORIAL ---
-                            IconButton(
-                              icon: const Icon(Icons.history, color: Colors.purpleAccent),
-                              onPressed: () => _navigateToLocationHistory(user),
-                              tooltip: 'Ver Historial de Ubicaciones',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                          CircleAvatar(
+                            radius: 24, // Avatar un poco más grande
+                            backgroundColor: Colors.blueAccent.withOpacity(0.2),
+                            child: Text(
+                              user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.blueAccent),
                             ),
-                            if (isFollowing)
-                              IconButton(
-                                icon: const Icon(Icons.map_outlined, color: Colors.green),
-                                onPressed: () => _navigateToUserMap(user),
-                                tooltip: 'Ver en Tiempo Real',
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                              ),
-                          ],
-                          if (canBeDeleted)
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                              onPressed: () => _deleteUserWithConfirmation(user),
-                              tooltip: 'Eliminar Usuario',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            )
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  user.name,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  "${user.email} - Rol: ${user.role}",
+                                  style: TextStyle(color: Colors.grey[700], fontSize: 14),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                    // 3. Divisor para separar la información de las acciones
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                      child: Divider(height: 1),
+                    ),
+                    // 4. Fila inferior dedicada solo para los botones
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround, // Espaciado uniforme
+                      children: [
+                        if (canBeFollowed) ...[
+                          // Botón para Seguir / Dejar de Seguir
+                          IconButton(
+                            iconSize: 28, // Botón más grande
+                            icon: Icon(
+                              isFollowing
+                                  ? Icons.person_remove_alt_1_outlined
+                                  : Icons.person_add_alt_1_outlined,
+                            ),
+                            color: isFollowing
+                                ? Colors.orangeAccent
+                                : Colors.blueAccent,
+                            onPressed: () => _toggleFollow(user.id, isFollowing),
+                            tooltip: isFollowing ? 'Dejar de Seguir' : 'Seguir Usuario',
+                          ),
+                          // Botón para ver el historial
+                          IconButton(
+                            iconSize: 28,
+                            icon: const Icon(Icons.history, color: Colors.purpleAccent),
+                            onPressed: () => _navigateToLocationHistory(user),
+                            tooltip: 'Ver Historial de Ubicaciones',
+                          ),
+                          // Botón para ver en tiempo real (solo si se está siguiendo)
+                          if (isFollowing)
+                            IconButton(
+                              iconSize: 28,
+                              icon: const Icon(Icons.map_outlined, color: Colors.green),
+                              onPressed: () => _navigateToUserMap(user),
+                              tooltip: 'Ver en Tiempo Real',
+                            )
+                        ],
+                        // Espaciador flexible para empujar el botón de eliminar a la derecha si no hay acciones de seguimiento
+                        if (!canBeFollowed && canBeDeleted) const Spacer(),
+                        if (canBeDeleted)
+                          IconButton(
+                            iconSize: 28,
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                            onPressed: () => _deleteUserWithConfirmation(user),
+                            tooltip: 'Eliminar Usuario',
+                          )
+                      ],
+                    ),
+                    // --- FIN DE CAMBIOS DE DISEÑO ---
+                  ],
                 ),
               ),
             );
